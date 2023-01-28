@@ -1,15 +1,28 @@
 version: "3"
 
 services:
+  flask:
+    build: 
+      context: .
+    command: poetry run flask --app server.app --debug run --host 0.0.0.0 --port 5000
+    volumes:
+      - ./py/server:/app
+      # - ./py/server/pypproject.toml:/app/pyproject.toml
+    ports:
+      - "5000:5000"
+    networks:
+      - enchantments_network
+    env_file: ./.env
+
   postgres:
     env_file: .env
     networks:
       - enchantments_network
     image: postgres:13.2
     environment:
-      POSTGRES_USER: "${postgresUser}"
-      POSTGRES_PASSWORD: "${postgresPassword}"
-      POSTGRES_DB: "${postgresDb}"
+      POSTGRES_USER: ${postgresUser}
+      POSTGRES_PASSWORD: ${postgresPassword}
+      POSTGRES_DB: ${postgresDb}
     ports:
       - "5432:5432"
     healthcheck:
@@ -18,15 +31,15 @@ services:
       timeout: 2s
       retries: 15
 
-  enchantments-server:
-    env_file: .env
-    networks:
-      - enchantments_network
-    build:
-      context: ./server
-    depends_on:
-      postgres:
-        condition: service_healthy
+  # enchantments-server:
+  #   env_file: .env
+  #   networks:
+  #     - enchantments_network
+  #   build:
+  #     context: ./py/server
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
 
 volumes:
   static_volume: {}

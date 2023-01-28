@@ -2,6 +2,7 @@ import csv
 import datetime
 import math
 import sys
+import os
 from dataclasses import dataclass
 
 import flask
@@ -12,10 +13,17 @@ from sqlalchemy import (Boolean, Column, Integer, MetaData, String,
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.types import Date
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///server/enchantments.db"
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}, echo=False
-)
+from server.create_db import create_db
+
+
+POSTGRES_USER=os.getenv("postgresUser")
+POSTGRES_PASSWORD=os.getenv("postgresPassword")
+POSTGRES_DB=os.getenv("postgresDb")
+
+# SQLALCHEMY_DATABASE_URL = "sqlite:///server/enchantments.db"
+SQLALCHEMY_DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@postgres:5432/{POSTGRES_DB}"
+engine = create_engine(SQLALCHEMY_DATABASE_URL, echo=False)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
@@ -102,93 +110,6 @@ class Application(Base):
                 "award_id": self.award_id,
             }
         }
-
-
-Base.metadata.create_all(engine)
-
-
-def create_db():
-    db = SessionLocal()
-
-    zones = [
-        "",
-        "Colchuck Zone",
-        "Core Enchantment Zone",
-        "Eightmile/Caroline Zone",
-        "Stuart  Zone",
-        "Snow Zone",
-        "Stuart Zone (stock)",
-        "Eightmile/Caroline Zone (",
-        "Eightmile/Caroline Zone (stock)",
-    ]
-
-    db.query(Zone).delete()
-    for id in range(1, len(zones)):
-        record = Zone(
-            zone_id=id,
-            name=zones[id],
-        )
-        db.add(record)
-    db.commit()
-
-    with open("./cleaned.csv", encoding="utf-8") as csvf:
-        csvReader = csv.DictReader(csvf)
-
-        db.query(Award).delete()
-        db.query(Application).delete()
-        app_id = 0
-        award_id = 0
-        for row in csvReader:
-            zone1 = zones.index(row["zone1"])
-            zone2 = zones.index(row["zone2"])
-            zone3 = zones.index(row["zone3"])
-            awarded = True if row["awarded"] == "Awarded" else False
-            app_id += 1
-            award_id_or_none = -1
-            if awarded:
-                award_id += 1
-                awarded_zone = zones.index(row["awardZone"])
-                dat = row["awardDate"].split("/")
-                if "/" in row["awardDate"]:
-                    dat = row["awardDate"].split("/")
-                else:
-                    dat = [1, 1, 99]
-                record = Award(
-                    award_id=award_id,
-                    application_id=app_id,
-                    zone_id=awarded_zone,
-                    pref=row["awardPref"],
-                    entry=datetime.date(int(dat[2]), int(dat[0]), int(dat[1])),
-                    size=row["awardSize"],
-                )
-                db.add(record)
-                db.commit()
-                award_id_or_none = award_id
-            if "/" in row["date1"]:
-                dat1 = row["date1"].split("/")
-            else:
-                dat1 = [1, 1, 99]
-            if "/" in row["date2"]:
-                dat2 = row["date2"].split("/")
-            else:
-                dat2 = [1, 1, 99]
-            if "/" in row["date3"]:
-                dat3 = row["date3"].split("/")
-            else:
-                dat3 = [1, 1, 99]
-            record = Application(
-                application_id=app_id,
-                date1=datetime.date(int(dat1[2]), int(dat1[0]), int(dat1[1])),
-                date2=datetime.date(int(dat2[2]), int(dat2[0]), int(dat2[1])),
-                date3=datetime.date(int(dat3[2]), int(dat3[0]), int(dat3[1])),
-                zone1=zone1,
-                zone2=zone2,
-                zone3=zone3,
-                awarded=awarded,
-                award_id=award_id_or_none,
-            )
-            db.add(record)
-            db.commit()
 
 
 class Config:
@@ -347,6 +268,12 @@ class ZonesResource(flask_restful.Resource):
 
 
 def create_app(config_obj=DevelopmentConfig):
+    try:
+        with open("./enchantments.db") as file:
+            pass
+    except Exception:
+        create_db()
+
     app = flask.Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_obj)
     return app
@@ -364,12 +291,12 @@ def initialize(app):
 
     CORS(app)
 
+app = create_app()
+initialize(app)
 
-if len(sys.argv) < 2:
-    create_db()
-else:
-    app = create_app()
-    initialize(app)
+with app.app_context():
+    Base.metadata.create_all(engine)
+
 
 
 # Notes:
